@@ -1,0 +1,92 @@
+services:
+
+  db:
+    image: postgres:17
+    container_name: hospital_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: hospital
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    ports:
+      - "5000:5000"
+      - "50051:50051"
+    depends_on:
+      - db
+      - mongo
+    environment:
+      DB_HOST: db
+      DB_NAME: hospital
+      DB_USER: admin
+      DB_PASS: secret
+      ACTIVEMQ_HOST: activemq
+      MONGO_URI: mongodb://admin:secret@mongo:27017/hospital_logs?authSource=admin
+
+  nginx_api:
+    build: ./nginx
+    ports:
+      - "8000:80"
+    depends_on:
+      - server
+    restart: always
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+
+  client:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    depends_on:
+      - server
+      - activemq
+
+  activemq:
+    image: rmohr/activemq:5.15.9
+    container_name: activemq
+    ports:
+      - "61613:61613" # STOMP
+      - "8161:8161" # Web console
+    volumes:
+      - activemq_data:/var/lib/activemq/data
+
+  mongo:
+    image: mongo:6.0
+    container_name: hospital_mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: secret
+      MONGO_INITDB_DATABASE: hospital_logs
+    ports:
+      - "27017:27017" # MongoDB port
+    volumes:
+      - mongo_data:/data/db
+
+  mongo-express:
+    image: mongo-express
+    container_name: hospital_mongo_express
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: secret
+      ME_CONFIG_MONGODB_URL: mongodb://admin:secret@mongo:27017/?authSource=admin
+    depends_on:
+      - mongo
+
+volumes:
+  db_data:
+  activemq_data:
+  mongo_data:
