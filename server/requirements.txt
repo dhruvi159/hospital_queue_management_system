@@ -1,0 +1,9 @@
+flask
+psycopg2-binary
+flask-cors
+grpcio
+grpcio-tools
+protobuf
+stomp.py
+pymongo
+pybreaker

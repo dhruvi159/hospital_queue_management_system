@@ -1,0 +1,20 @@
+syntax = "proto3";
+package hospital;
+
+service QueueService {
+  rpc GetQueue (Empty) returns (QueueResponse) {}
+}
+
+message Empty {}
+
+message Appointment {
+  int32 id = 1;
+  string patient_name = 2;
+  string appointment_time = 3;
+  string created_at = 4;
+}
+
+message QueueResponse {
+  int32 patients_waiting = 1;
+  repeated Appointment appointments = 2;
+}

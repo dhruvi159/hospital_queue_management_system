@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Hospital Queue</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Hospital Appointment Queue</h1>
+      <div style="display:flex;gap:12px;align-items:center;">
+        <div class="meta">Manage patients — book, reschedule, or remove</div>
+        <button class="btn ghost" style="padding:8px 12px;" onclick="openAdmin()">Admin</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <h2 style="margin-top:0">Book Appointment</h2>
+        <div style="margin-bottom:10px">
+          <label for="name">Patient name</label>
+          <input id="name" placeholder="Enter full name">
+        </div>
+        <div style="margin-bottom:12px">
+          <label for="time">Appointment time</label>
+          <input id="time" type="datetime-local">
+        </div>
+        <div class="row">
+          <button class="btn" onclick="book()">Book</button>
+          <button class="btn secondary" onclick="clearForm()">Clear</button>
+        </div>
+        <div class="note">Tip: use the date/time picker for accurate timestamps.</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API = `${location.protocol}//${location.hostname}:5000`;
+
+    function toServerTimestampLocal(value) {
+      if (!value) return null;
+      // datetime-local gives "YYYY-MM-DDTHH:MM" — append seconds
+      if (value.length === 16) return value + ":00";
+      return value;
+    }
+
+    async function book() {
+      const name = document.getElementById('name').value.trim();
+      const timeVal = document.getElementById('time').value;
+      if (!name || !timeVal) { alert('Please provide name and time'); return; }
+
+      const appointment_time = toServerTimestampLocal(timeVal);
+
+      await fetch(API + '/book', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({patient_name: name, appointment_time})
+      });
+
+      clearForm();
+      if (document.getElementById('adminPanel') && document.getElementById('adminPanel').style.display === 'block') loadAdmin();
+    }
+
+    function clearForm(){document.getElementById('name').value='';document.getElementById('time').value=''}
+
+    async function deleteAppointment(id){
+      if (!confirm('Delete this appointment?')) return;
+      await fetch(API + `/delete/${id}`, {method:'DELETE'});
+      if (document.getElementById('adminPanel') && document.getElementById('adminPanel').style.display === 'block') loadAdmin();
+    }
+
+    async function editAppointment(id, currentTime){
+      // Convert ISO -> datetime-local format
+      const dt = new Date(currentTime);
+      const pad = n => String(n).padStart(2,'0');
+      const local = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+      const newVal = prompt('Enter new appointment time (picker will open):', local);
+      if (!newVal) return;
+      const appointment_time = toServerTimestampLocal(newVal);
+      await fetch(API + `/update/${id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({appointment_time})});
+      if (document.getElementById('adminPanel') && document.getElementById('adminPanel').style.display === 'block') loadAdmin();
+    }
+
+    // Initial load: no queue card — admin view loads when opened
+
+    // Admin panel functions
+    function openAdmin(){
+      document.getElementById('adminPanel').style.display = 'block';
+      loadAdmin();
+    }
+    function closeAdmin(){
+      document.getElementById('adminPanel').style.display = 'none';
+    }
+
+    async function loadAdmin(){
+      const res = await fetch(API + '/admin/appointments');
+      const data = await res.json();
+      const container = document.getElementById('adminList');
+      container.innerHTML = '';
+
+      if (!data.appointments || data.appointments.length === 0){
+        container.innerHTML = '<div class="meta">No appointments found</div>';
+        return;
+      }
+
+      data.appointments.forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'admin-row';
+        row.innerHTML = `
+          <div style="flex:1">
+            <div style="font-weight:600">${a.patient_name}</div>
+            <div class="meta">Appointment: ${new Date(a.appointment_time).toLocaleString()}</div>
+            <div class="meta">Booked: ${a.created_at ? new Date(a.created_at).toLocaleString() : 'n/a'}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn ghost" onclick="adminReschedule(${a.id}, '${a.appointment_time}')">Reschedule</button>
+            <button class="btn danger" onclick="adminDelete(${a.id})">Delete</button>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    async function adminDelete(id){
+      if (!confirm('Delete this appointment (admin)?')) return;
+      await fetch(API + `/delete/${id}`, {method:'DELETE'});
+      loadAdmin();
+    }
+
+    async function adminReschedule(id, currentTime){
+      const dt = new Date(currentTime);
+      const pad = n => String(n).padStart(2,'0');
+      const local = `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+      const newVal = prompt('Enter new appointment time (admin):', local);
+      if (!newVal) return;
+      const appointment_time = toServerTimestampLocal(newVal);
+      await fetch(API + `/update/${id}`, {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({appointment_time})});
+      loadAdmin();
+    }
+  </script>
+
+    <!-- Admin modal -->
+    <div id="adminPanel" style="display:none">
+      <div class="modal-overlay" onclick="closeAdmin()"></div>
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <h3>Admin — All Appointments</h3>
+          <button class="btn ghost" onclick="closeAdmin()">Close</button>
+        </div>
+        <div id="adminList" class="modal-list"></div>
+      </div>
+    </div>
+
+  </body>
+  </html>
